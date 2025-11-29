@@ -1,19 +1,20 @@
 package com.example.attributefallback;
 
 import com.mojang.logging.LogUtils;
-import net.minecraft.core.component.DataComponentMap;
-import net.minecraft.core.component.DataComponentType;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.registries.RegisterEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.ItemAttributeModifierEvent;
 import org.slf4j.Logger;
 
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 
 @Mod(AttributeFallbackMod.MOD_ID)
@@ -23,53 +24,40 @@ public class AttributeFallbackMod {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     public AttributeFallbackMod() {
-        LOGGER.info("[AttributeFallback] Loaded.");
+        NeoForge.EVENT_BUS.register(this);
+        LOGGER.info("[AttributeFallback] Mod loaded.");
     }
 
     @SubscribeEvent
-    public void onItemRegistry(RegisterEvent event) {
+    public void onItemAttributeModifiers(ItemAttributeModifierEvent event) {
 
-        if (!event.getRegistryKey().equals(net.minecraft.core.registries.Registries.ITEM)) {
+        List<ItemAttributeModifiers.Entry> mods = event.getModifiers();
+
+        // If the item already has modifiers, do nothing.
+        if (mods != null && !mods.isEmpty()) {
+            LOGGER.debug("[AttributeFallback] Existing modifiers found, skipping.");
             return;
         }
 
-        event.getRegistry().forEach(entry -> {
-            Item item = entry.getValue();
+        ItemStack stack = event.getItemStack();
+        String itemId = stack.getItem().toString();
 
-            DataComponentMap comps = item.components();
+        LOGGER.warn("[AttributeFallback] NULL/empty attributes on {} — injecting fallback.", itemId);
 
-            ItemAttributeModifiers existing = comps.get(DataComponentType.ATTRIBUTE_MODIFIERS);
+        // Stable UUID so modifier doesn't duplicate
+        UUID uuid = UUID.nameUUIDFromBytes(
+                ("attribute_fallback:" + itemId).getBytes(StandardCharsets.UTF_8)
+        );
 
-            // If already valid, skip
-            if (existing != null && !existing.modifiers().isEmpty()) {
-                return;
-            }
+        AttributeModifier fallback = new AttributeModifier(
+                ResourceLocation.withDefaultNamespace("attribute_fallback_zero"),
+                0.0D,
+                AttributeModifier.Operation.ADD_VALUE
+        );
 
-            LOGGER.warn("[AttributeFallback] '{}' missing attribute component — patching.", entry.getKey());
+        // Inject the fallback attack damage modifier into ANY slot.
+        event.addModifier(Attributes.ATTACK_DAMAGE, fallback, EquipmentSlotGroup.ANY);
 
-            // Build a safe fallback modifiers object
-            ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder();
-
-            builder.add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                            UUID.nameUUIDFromBytes(entry.getKey().toString().getBytes()),
-                            "fallback_zero",
-                            0D,
-                            AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.ANY
-            );
-
-            ItemAttributeModifiers fallback = builder.build();
-
-            // Replace component safely
-            DataComponentMap patched = comps.with(DataComponentTypes.ATTRIBUTE_MODIFIERS, fallback);
-
-            // Apply to item instance
-            item.updateComponents(patched);
-
-            LOGGER.info("[AttributeFallback] Patched '{}'.", entry.getKey());
-        });
+        LOGGER.info("[AttributeFallback] Injected safe fallback modifier for {}", itemId);
     }
 }
