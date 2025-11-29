@@ -1,17 +1,19 @@
-package com.example.attributefallback;
+package com.example.AttributeFallback;
 
 import com.mojang.logging.LogUtils;
+import org.slf4j.Logger;
+
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
-import net.neoforged.bus.api.SubscribeEvent;
+
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.ItemAttributeModifierEvent;
-import org.slf4j.Logger;
+import net.neoforged.bus.api.SubscribeEvent;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -25,7 +27,7 @@ public class AttributeFallbackMod {
 
     public AttributeFallbackMod() {
         NeoForge.EVENT_BUS.register(this);
-        LOGGER.info("[AttributeFallback] Mod loaded.");
+        LOGGER.info("[AttributeFallback] Mod '{}' initialized.", MOD_ID);
     }
 
     @SubscribeEvent
@@ -33,7 +35,7 @@ public class AttributeFallbackMod {
 
         List<ItemAttributeModifiers.Entry> mods = event.getModifiers();
 
-        // If the item already has modifiers, do nothing.
+        // Skip items with existing modifiers
         if (mods != null && !mods.isEmpty()) {
             LOGGER.debug("[AttributeFallback] Existing modifiers found, skipping.");
             return;
@@ -42,22 +44,22 @@ public class AttributeFallbackMod {
         ItemStack stack = event.getItemStack();
         String itemId = stack.getItem().toString();
 
-        LOGGER.warn("[AttributeFallback] NULL/empty attributes on {} — injecting fallback.", itemId);
+        LOGGER.warn("[AttributeFallback] Null/empty attribute modifiers detected for {} — applying fallback.", itemId);
 
-        // Stable UUID so modifier doesn't duplicate
+        // Stable UUID
         UUID uuid = UUID.nameUUIDFromBytes(
                 ("attribute_fallback:" + itemId).getBytes(StandardCharsets.UTF_8)
         );
 
-        AttributeModifier fallback = new AttributeModifier(
+        AttributeModifier zero = new AttributeModifier(
                 ResourceLocation.withDefaultNamespace("attribute_fallback_zero"),
                 0.0D,
                 AttributeModifier.Operation.ADD_VALUE
         );
 
-        // Inject the fallback attack damage modifier into ANY slot.
-        event.addModifier(Attributes.ATTACK_DAMAGE, fallback, EquipmentSlotGroup.ANY);
+        // Add fallback modifier
+        event.addModifier(Attributes.ATTACK_DAMAGE, zero, EquipmentSlotGroup.ANY);
 
-        LOGGER.info("[AttributeFallback] Injected safe fallback modifier for {}", itemId);
+        LOGGER.info("[AttributeFallback] Injected fallback modifier into {}", itemId);
     }
 }
